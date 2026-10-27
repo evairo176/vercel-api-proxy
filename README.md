@@ -136,6 +136,24 @@ RELAY_COUNT=100 python3 deploy_relays.py
 
 > Catatan Vercel: `[...path].ts` catch-all **tidak** didukung di project non-framework (dianggap nama file literal, hasilnya 404). Karena itu path asli dititipkan lewat query `__relay_path` oleh rewrite.
 
+## Multi provider (host di path)
+
+Satu deployment bisa nembak provider apa saja. Host upstream jadi segmen path:
+
+```
+https://<relay>/<host>/v1/chat/completions                 # tanpa gerbang token
+https://<relay>/<RELAY_TOKEN>/<host>/v1/chat/completions    # dengan gerbang token
+```
+
+Contoh: `https://relay-xxx.vercel.app/2676.../api.entrim.ai/v1` bisa dipakai langsung
+sebagai base URL 9router / OpenAI SDK. Ganti provider = ganti segmen host, tanpa deploy ulang.
+
+- Prioritas target: header `x-relay-target` > host di path > env `DEFAULT_TARGET`
+- `RELAY_TOKEN` kalau diisi: segmen pertama wajib sama, kalau salah `401 invalid_relay_token`.
+  Secret ditaruh di path (bukan query) supaya tetap aman di client yang menyambung string base URL.
+- `ALLOWED_TARGET_HOSTS` mendukung `*` dan `*.example.com`
+- UI builder ada di `/` (halaman statis, daftar provider disimpan di localStorage browser, tanpa server storage)
+
 ## Verifikasi deployment
 
 ```bash
