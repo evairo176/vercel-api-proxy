@@ -1,7 +1,6 @@
 {
   "rewrites": [
     { "source": "/", "destination": "/api/proxy" },
-    { "source": "/api/health", "destination": "/api/health" },
-    { "source": "/(.*)", "destination": "/api/proxy/$1" }
+    { "source": "/(.*)", "destination": "/api/proxy?__relay_path=$1" }
   ]
 }

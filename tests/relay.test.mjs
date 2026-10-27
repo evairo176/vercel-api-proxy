@@ -105,9 +105,11 @@ const relay = http.createServer((req, res) => {
     return healthHandler(fakeReq, fakeRes);
   }
 
-  // mimic vercel.json: "/" -> /api/proxy ; "/(.*)" -> /api/proxy/$1
-  const rest = url.pathname === "/" ? "" : url.pathname;
-  req.url = `/api/proxy${rest}${url.search}`;
+  // mimic vercel.json: "/" -> /api/proxy ; "/(.*)" -> /api/proxy?__relay_path=$1
+  const capture = url.pathname === "/" ? "" : url.pathname.replace(/^\//, "");
+  const qs = new URLSearchParams(url.search);
+  if (capture) qs.set("__relay_path", capture);
+  req.url = `/api/proxy${qs.toString() ? "?" + qs.toString() : ""}`;
   return proxyHandler(fakeReq, fakeRes);
 });
 

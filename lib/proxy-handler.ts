@@ -150,9 +150,10 @@ function trimSlashes(value: string): string {
 /**
  * Rebuild the upstream subpath from (in priority order):
  *   1. x-relay-path header — explicit override, wins over everything
- *   2. the real request pathname with the /api/proxy prefix removed
- *      (the vercel.json rewrite keeps original segments: /v1/chat ->
- *      /api/proxy/v1/chat, so nothing is lost)
+ *   2. ?__relay_path= capture injected by the vercel.json rewrite
+ *      (Vercel does not support [...slug].ts catch-all outside Next.js, so the
+ *      rewrite parks the original path in a query param instead)
+ *   3. the real request pathname with the /api/proxy prefix removed
  *
  * Real query params are always merged back in, so ?limit=10 survives.
  */
@@ -166,7 +167,12 @@ function resolveSubpath(
       ? req.headers["x-relay-path"].trim()
       : "";
 
-  let subpath = headerPath;
+  const rewritten =
+    typeof searchParams.get("__relay_path") === "string"
+      ? (searchParams.get("__relay_path") as string)
+      : "";
+
+  let subpath = headerPath || rewritten;
   if (!subpath) {
     subpath = pathname.startsWith("/api/proxy")
       ? pathname.slice("/api/proxy".length)
