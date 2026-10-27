@@ -218,7 +218,7 @@ console.log("\n=== 11. missing target ===");
   const r = await fetch(`${BASE}/v1/models`);
   const j = await r.json();
   check("400", r.status === 400, r.status);
-  check("error msg", /x-relay-target/.test(j.error || ""), JSON.stringify(j));
+  check("error msg", j.error === "no_target", JSON.stringify(j));
   check("cors on error", r.headers.get("access-control-allow-origin") === "*");
 }
 
@@ -288,10 +288,34 @@ console.log("\n=== 18. TTFB timeout -> 504 ===");
   const r = await fetch(`${BASE}/slow`, { headers: H });
   const elapsed = Date.now() - t0;
   const j = await r.json();
-  process.env.RELAY_TIMEOUT_MS = prev;
+  if (prev === undefined) delete process.env.RELAY_TIMEOUT_MS;
+  else process.env.RELAY_TIMEOUT_MS = prev;
   check("504 status", r.status === 504, r.status);
   check("error upstream_timeout", j.error === "upstream_timeout", JSON.stringify(j));
   check("timed out fast (<2s)", elapsed < 2000, `${elapsed}ms`);
+}
+
+console.log("\n=== 19. multi-provider path routing (host in path, no header) ===");
+{
+  process.env.RELAY_PATH_SCHEME = "http";
+  const r = await fetch(`${BASE}/127.0.0.1:${UPSTREAM_PORT}/v1/models`);
+  const j = await r.json();
+  check("200 without x-relay-target", r.status === 200, r.status);
+  check("upstream path rebuilt", j.url === "/v1/models", j.url);
+}
+
+console.log("\n=== 20. RELAY_TOKEN path gate ===");
+{
+  process.env.RELAY_TOKEN = "sekret";
+  const bad = await fetch(`${BASE}/salah/127.0.0.1:${UPSTREAM_PORT}/v1/models`);
+  check("wrong token 401", bad.status === 401, bad.status);
+  check("error invalid_relay_token", (await bad.json()).error === "invalid_relay_token");
+
+  const ok = await fetch(`${BASE}/sekret/127.0.0.1:${UPSTREAM_PORT}/v1/models?limit=7`);
+  const j = await ok.json();
+  check("right token 200", ok.status === 200, ok.status);
+  check("path + query intact", j.url === "/v1/models?limit=7", j.url);
+  process.env.RELAY_TOKEN = "";
 }
 
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILED`}\n`);

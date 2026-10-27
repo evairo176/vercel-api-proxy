@@ -199,7 +199,44 @@ function resolveSubpath(
 function isAllowedHost(url: URL): boolean {
   const allowList = parseList(process.env.ALLOWED_TARGET_HOSTS);
   if (allowList.length === 0) return true;
-  return allowList.includes(url.hostname) || allowList.includes(url.host);
+  if (allowList.includes("*")) return true;
+  const host = url.hostname.toLowerCase();
+  for (const entry of allowList) {
+    const rule = entry.toLowerCase();
+    if (rule === host || rule === url.host.toLowerCase()) return true;
+    // "*.example.com" allows api.example.com (not example.com itself)
+    if (rule.startsWith("*.") && host.endsWith(rule.slice(1))) return true;
+  }
+  return false;
+}
+
+const HOST_RE =
+  /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?$/i;
+
+/**
+ * Path routing so one deployment serves many providers:
+ *   /<host>/v1/chat/completions          (host encoded in the path)
+ *   /<RELAY_TOKEN>/<host>/v1/...         (same, gated by a path secret)
+ * Returns target="" when the path carries no host, so DEFAULT_TARGET still works.
+ */
+function resolveRoute(subpath: string): { target: string; subpath: string; tokenError: boolean } {
+  const segments = subpath.split("/").filter(Boolean);
+  const token = (process.env.RELAY_TOKEN || "").trim();
+
+  if (token) {
+    if (segments[0] !== token) {
+      return { target: "", subpath, tokenError: true };
+    }
+    segments.shift();
+  }
+
+  if (segments.length > 0 && HOST_RE.test(segments[0])) {
+    const host = segments.shift() as string;
+    const scheme = (process.env.RELAY_PATH_SCHEME || "https").trim();
+    return { target: `${scheme}://${host}`, subpath: segments.join("/"), tokenError: false };
+  }
+
+  return { target: "", subpath: segments.join("/"), tokenError: false };
 }
 
 export default async function handler(
@@ -217,16 +254,37 @@ export default async function handler(
     return;
   }
 
-  // 2. Target base URL (no open-proxy: must be absolute http/https).
-  //    x-relay-target wins; DEFAULT_TARGET makes the relay a plain drop-in
-  //    base URL for clients that cannot set custom headers (9router, SDKs).
+  // 2. Resolve subpath first — the path may itself name the upstream host.
+  const parsed = new URL(req.url || "/", "http://relay.local");
+  const resolved = resolveSubpath(req, parsed.pathname, parsed.searchParams);
+  const route = resolveRoute(resolved.path);
+  const subpath = route.subpath;
+  const query = resolved.query;
+
+  if (route.tokenError) {
+    sendJson(res, 401, { error: "invalid_relay_token" }, cors);
+    return;
+  }
+
+  // 3. Target base URL. Priority: header (per-request) > host in path >
+  //    DEFAULT_TARGET (drop-in base URL for 9router / SDKs).
   const rawTarget =
     (typeof req.headers["x-relay-target"] === "string"
       ? req.headers["x-relay-target"].trim()
-      : "") || (process.env.DEFAULT_TARGET || "").trim();
+      : "") ||
+    route.target ||
+    (process.env.DEFAULT_TARGET || "").trim();
 
   if (!rawTarget) {
-    sendJson(res, 400, { error: "x-relay-target header required" }, cors);
+    sendJson(
+      res,
+      400,
+      {
+        error: "no_target",
+        usage: "/<RELAY_TOKEN>/<host>/v1/chat/completions, x-relay-target header, or DEFAULT_TARGET env",
+      },
+      cors
+    );
     return;
   }
 
@@ -248,14 +306,7 @@ export default async function handler(
     return;
   }
 
-  // 3. Build the upstream URL — path AND query preserved.
-  const parsed = new URL(req.url || "/", "http://relay.local");
-  const { path: subpath, query } = resolveSubpath(
-    req,
-    parsed.pathname,
-    parsed.searchParams
-  );
-
+  // 4. Build the upstream URL — path AND query preserved.
   const base = targetBase.toString().replace(/\/+$/, "");
   const upstreamUrl = `${base}${subpath ? `/${subpath}` : ""}${
     query ? `?${query}` : ""
@@ -299,7 +350,7 @@ export default async function handler(
   // for the whole request would kill long SSE / streaming completions, so we
   // clear it as soon as headers arrive and let platform maxDuration cap the
   // body phase.
-  const timeoutMs = Number(process.env.RELAY_TIMEOUT_MS || 60_000);
+  const timeoutMs = Number(process.env.RELAY_TIMEOUT_MS) || 60_000;
   const controller = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => {

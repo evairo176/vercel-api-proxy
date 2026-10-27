@@ -117,6 +117,7 @@ def vercel_get_plans():
 DEPLOY_FILES = [
     "api/proxy/index.ts",
     "api/health.ts",
+    "api/ui.ts",
     "lib/proxy-handler.ts",
     "package.json",
     "vercel.json",
@@ -166,6 +167,9 @@ def vercel_create_deployment(project_name, team_id=None):
     default_target = os.environ.get("RELAY_DEFAULT_TARGET", "").strip()
     if default_target:
         envs["DEFAULT_TARGET"] = default_target
+    relay_token = os.environ.get("RELAY_TOKEN", "").strip()
+    if relay_token:
+        envs["RELAY_TOKEN"] = relay_token
     for key, value in envs.items():
         vercel_api(
             "POST",
