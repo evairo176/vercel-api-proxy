@@ -156,18 +156,23 @@ def vercel_create_deployment(project_name, team_id=None):
 
     # Optional upstream whitelist so a leaked relay URL cannot be used as an
     # open proxy on the user's account. RELAY_ALLOWED_HOSTS="a.com,b.com"
+    # RELAY_DEFAULT_TARGET="https://api.x.ai" makes the relay a drop-in base
+    # URL for clients that can't set the x-relay-target header.
+    envs = {}
     allowed = os.environ.get("RELAY_ALLOWED_HOSTS", "").strip()
     if allowed:
-        for key, value in (
-            ("ALLOWED_TARGET_HOSTS", allowed),
-            ("ALLOWED_ORIGINS", os.environ.get("RELAY_ALLOWED_ORIGINS", "*").strip()),
-        ):
-            vercel_api(
-                "POST",
-                f"/v10/projects/{project_id}/env",
-                {"key": key, "value": value, "type": "plain", "target": ["production", "preview"]},
-                team_id,
-            )
+        envs["ALLOWED_TARGET_HOSTS"] = allowed
+        envs["ALLOWED_ORIGINS"] = os.environ.get("RELAY_ALLOWED_ORIGINS", "*").strip()
+    default_target = os.environ.get("RELAY_DEFAULT_TARGET", "").strip()
+    if default_target:
+        envs["DEFAULT_TARGET"] = default_target
+    for key, value in envs.items():
+        vercel_api(
+            "POST",
+            f"/v10/projects/{project_id}/env",
+            {"key": key, "value": value, "type": "plain", "target": ["production", "preview"]},
+            team_id,
+        )
 
     files, ferr = read_sources()
     if ferr:

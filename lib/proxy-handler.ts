@@ -218,10 +218,12 @@ export default async function handler(
   }
 
   // 2. Target base URL (no open-proxy: must be absolute http/https).
+  //    x-relay-target wins; DEFAULT_TARGET makes the relay a plain drop-in
+  //    base URL for clients that cannot set custom headers (9router, SDKs).
   const rawTarget =
-    typeof req.headers["x-relay-target"] === "string"
+    (typeof req.headers["x-relay-target"] === "string"
       ? req.headers["x-relay-target"].trim()
-      : "";
+      : "") || (process.env.DEFAULT_TARGET || "").trim();
 
   if (!rawTarget) {
     sendJson(res, 400, { error: "x-relay-target header required" }, cors);
