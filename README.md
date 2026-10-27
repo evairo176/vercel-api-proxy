@@ -2,18 +2,20 @@
 
 ```
 febfrmn
-****   
+****
     ***
-       
-       
-  *    
-       
-     * 
+
+
+
+
+  *
+       *
+     *
  *    *
-*  *   
-       
-       
-    *  
+*  *
+       *
+       *
+    *
           Vercel AI Proxy · deploy relay proxy massal
           https://saweria.co/febfrmn
 ```
@@ -32,21 +34,71 @@ Deploy **relay proxy AI ke Vercel massal** — auto-detect plan + **PARALEL mult
 
 ```
 vercel-ai-proxy/
-├── api/proxy.ts         # Relay proxy (Vercel Serverless Function)
-├── vercel.json          # Rewrite semua request → /api/proxy
-├── deploy_relays.py     # ⭐ Deploy massal + auto-detect plan
-├── assign_relays.py     # Assign relay URLs ke provider connections
-├── inject_relays.py     # Inject URL relay ke database (contoh)
-├── package.json         # Deploy single + @vercel/node
+├── api/proxy/index.ts        # Route /api/proxy
+├── api/proxy/[...path].ts    # Route /api/proxy/* (catch-all dari rewrite)
+├── api/health.ts             # Route /api/health — liveness probe
+├── lib/proxy-handler.ts      # ⭐ Seluruh logic relay (dipakai 2 route di atas)
+├── vercel.json               # Rewrite semua request → /api/proxy
+├── tsconfig.json             # Typecheck lokal (tidak ikut deploy)
+├── deploy_relays.py          # ⭐ Deploy massal + auto-detect plan
+├── assign_relays.py          # Assign relay URLs ke provider connections
+├── inject_relays.py          # Inject URL relay ke database
+└── package.json              # Deploy single + @vercel/node
 ```
 
 ## Cara Kerja Proxy
 
-`api/proxy.ts` relay universal:
-- Request masuk → baca header `x-relay-target` (URL tujuan) + `x-relay-path` (opsional)
-- Forward semua header kecuali `x-relay-target`, `host`, `content-length`, `accept-encoding`
-- Stream response balik, tambah header `x-relay-proxy: vercel`
-- Tanpa secret — murni header-based
+`lib/proxy-handler.ts` relay universal:
+
+- Request masuk → baca header `x-relay-target` (URL tujuan upstream)
+- Path **dan** query string diteruskan utuh, body dikirim sebagai byte mentah
+- Forward semua header kecuali `x-relay-target`, `host`, `connection`, `transfer-encoding`, `content-length`, `accept-encoding`
+- Response: status + header aman diteruskan, body di-stream dengan backpressure
+- Tambah header `x-relay-proxy: vercel` dan `x-relay-upstream-status`
+- Tanpa secret — murni header-based, caller bawa auth sendiri
+
+### Pemakaian
+
+```bash
+# Base URL relay = root deployment, path diteruskan otomatis
+curl https://relay-xxxx.vercel.app/v1/chat/completions \
+  -H "x-relay-target: https://api.openai.com" \
+  -H "authorization: Bearer $OPENAI_KEY" \
+  -H "content-type: application/json" \
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hi"}]}'
+```
+
+`x-relay-path` masih didukung sebagai override eksplisit kalau path perlu dipaksa:
+
+```bash
+curl https://relay-xxxx.vercel.app/ \
+  -H "x-relay-target: https://api.openai.com" \
+  -H "x-relay-path: /v1/models?limit=5"
+```
+
+### Yang dijamin handler ini
+
+| Kasus | Perilaku |
+|-------|----------|
+| Path + query string | Diteruskan utuh (`?limit=10&after=x` tidak hilang) |
+| Body JSON / multipart | Byte mentah, tidak di-parse + stringify ulang |
+| Redirect 3xx dari upstream | Diteruskan apa adanya, tidak di-follow |
+| Response terkompresi | Body sudah di-decode, header `content-encoding` dibuang |
+| Stream besar / SSE | `pipeline()` dengan backpressure, tidak terpotong |
+| `set-cookie` multiple | Diteruskan sebagai array |
+| CORS preflight | Dijawab lokal, 204 |
+| `204` / `304` / `HEAD` | Tanpa body (sesuai spec) |
+| Upstream mati | `502 relay_failed` |
+| Upstream timeout | `504 upstream_timeout` |
+| Target bukan http(s) | `400 invalid_target_protocol` |
+
+### Environment variable (opsional)
+
+| Env | Default | Fungsi |
+|-----|---------|--------|
+| `ALLOWED_ORIGINS` | `*` | Daftar origin dipisah koma untuk CORS |
+| `ALLOWED_TARGET_HOSTS` | (kosong = semua) | Whitelist hostname upstream, anti open-proxy |
+| `RELAY_TIMEOUT_MS` | `60000` | Batas waktu request ke upstream |
 
 ## Auto-Detect Plan
 
@@ -81,6 +133,26 @@ RELAY_COUNT=100 python3 deploy_relays.py
 |-----|--------|
 | `VERCEL_TOKEN` | Token Vercel (WAJIB) |
 | `RELAY_COUNT` | Jumlah relay per plan (kalau ga pakai argumen) |
+
+## Verifikasi deployment
+
+```bash
+# liveness
+curl -s https://relay-xxxx.vercel.app/api/health
+# -> {"ok":true,"service":"vercel-ai-proxy","version":2,...}
+
+# relay end-to-end
+curl -s https://relay-xxxx.vercel.app/v1/models \
+  -H "x-relay-target: https://api.openai.com" \
+  -H "authorization: Bearer $KEY"
+```
+
+## Typecheck lokal
+
+```bash
+bun install          # atau npm install
+npm run typecheck    # tsc --noEmit
+```
 
 ## Konvensi
 

@@ -112,6 +112,34 @@ def vercel_get_plans():
     return plans, None
 
 
+# Files uploaded with every deployment (relative to SCRIPT_DIR).
+# Keep in sync with the repo layout — a missing entry here deploys a broken proxy.
+DEPLOY_FILES = [
+    "api/proxy/index.ts",
+    "api/proxy/[...path].ts",
+    "api/health.ts",
+    "lib/proxy-handler.ts",
+    "package.json",
+    "vercel.json",
+]
+
+
+def read_sources():
+    """Read every file that must ship with the deployment.
+
+    Returns (files, error) where files is the Vercel deployment "files" payload.
+    """
+    out = []
+    for rel in DEPLOY_FILES:
+        path = os.path.join(SCRIPT_DIR, rel)
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                out.append({"file": rel, "data": fh.read()})
+        except Exception as e:
+            return None, f"read {rel}: {e}"
+    return out, None
+
+
 def vercel_create_deployment(project_name, team_id=None):
     """Deploy 1 relay proxy: create project -> disable SSO -> POST deployment."""
     proj = vercel_api("POST", "/v10/projects", {"name": project_name, "framework": None}, team_id)
@@ -127,21 +155,14 @@ def vercel_create_deployment(project_name, team_id=None):
 
     vercel_api("PATCH", f"/v9/projects/{project_id}", {"ssoProtection": None}, team_id)
 
-    try:
-        proxy_ts = open(f"{SCRIPT_DIR}/api/proxy.ts").read()
-        pkg_json = open(f"{SCRIPT_DIR}/package.json").read()
-        vercel_json = open(f"{SCRIPT_DIR}/vercel.json").read()
-    except Exception as e:
-        return {"ok": False, "error": f"read source: {e}"}
+    files, ferr = read_sources()
+    if ferr:
+        return {"ok": False, "error": ferr}
 
     dep_body = {
         "name": project_name,
         "project": project_id,
-        "files": [
-            {"file": "api/proxy.ts", "data": proxy_ts},
-            {"file": "package.json", "data": pkg_json},
-            {"file": "vercel.json", "data": vercel_json},
-        ],
+        "files": files,
         "projectSettings": {"framework": None, "buildCommand": None, "outputDirectory": None},
         "target": "production",
     }

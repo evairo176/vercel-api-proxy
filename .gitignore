@@ -1,1 +1,7 @@
 .vercel
+node_modules
+relay_urls.txt
+__pycache__/
+*.pyc
+bun.lock
+bun.lockb

@@ -11,11 +11,14 @@ Deploy relay proxy AI ke Vercel massal — auto-detect plan, satu script (Python
 
 ## Konteks Project
 
-- `api/proxy.ts` — relay proxy Vercel (header `x-relay-target` → forward semua request)
-- `vercel.json` — rewrite `/(.*)` → `/api/proxy`
-- `deploy_relays.py` — deploy massal + auto-detect plan per team
+- `lib/proxy-handler.ts` — seluruh logic relay (forward header `x-relay-target`)
+- `api/proxy/index.ts` + `api/proxy/[...path].ts` — thin route, re-export handler
+- `api/health.ts` — liveness probe (`/api/health`)
+- `vercel.json` — rewrite `/` → `/api/proxy`, `/(.*)` → `/api/proxy/$1`
+- `deploy_relays.py` — deploy massal + auto-detect plan (`DEPLOY_FILES` wajib sinkron dengan layout repo)
 - `assign_relays.py` — assign relay URL ke provider connections
 - `inject_relays.py` — inject relay ke DB (contoh)
+- `tests/relay.test.mjs` — test lokal end-to-end (`bun tests/relay.test.mjs`)
 
 **Alur normal:**
 1. `export VERCEL_TOKEN="..."` (dari user)
@@ -42,10 +45,10 @@ Sebelum jalanin `assign_relays.py` / `inject_relays.py`, tanya:
 - **Ini production atau test?**
 
 ### 3. Perubahan kode
-Kalau user minta ubah kode (proxy.ts, deploy script, dll), tanya:
+Kalau user minta ubah kode (proxy handler, deploy script, dll), tanya:
 - **Behavior apa yang diubah?** (jelasin pemahamanmu dulu)
 - **Breaking change atau gak?**
-- **Perlu test dulu?**
+- **Perlu test dulu?** (`bun tests/relay.test.mjs` — 43 assertion, wajib ALL PASS)
 
 ---
 

@@ -1,10 +1,12 @@
 {
   "name": "vercel-ai-proxy",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Generic AI relay proxy — one deploy = one proxy",
   "scripts": {
-    "deploy": "vercel deploy --prod --yes"
+    "deploy": "vercel deploy --prod --yes",
+    "typecheck": "tsc --noEmit",
+    "test": "bun tests/relay.test.mjs"
   },
   "devDependencies": {
     "@vercel/node": "^5.9.5"
