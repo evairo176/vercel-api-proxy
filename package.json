@@ -1,18 +1,12 @@
 {
-  "name": "vercel-api-proxy",
+  "name": "vercel-ai-proxy",
   "version": "1.0.0",
-  "description": "Vercel API Proxy serverless function",
-  "main": "api/proxy.js",
-  "type": "module",
+  "private": true,
+  "description": "Generic AI relay proxy — one deploy = one proxy",
   "scripts": {
-    "dev": "vercel dev"
+    "deploy": "vercel deploy --prod --yes"
   },
-  "keywords": [
-    "vercel",
-    "proxy",
-    "api-proxy",
-    "serverless"
-  ],
-  "author": "",
-  "license": "MIT"
+  "devDependencies": {
+    "@vercel/node": "^5.9.5"
+  }
 }

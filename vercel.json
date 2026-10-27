@@ -1,18 +1,5 @@
 {
-  "version": 2,
-  "outputDirectory": "public",
   "rewrites": [
-    {
-      "source": "/api/health",
-      "destination": "/api/health.js"
-    },
-    {
-      "source": "/api/proxy",
-      "destination": "/api/proxy.js"
-    },
-    {
-      "source": "/api/proxy/(.*)",
-      "destination": "/api/proxy.js?path=$1"
-    }
+    { "source": "/(.*)", "destination": "/api/proxy" }
   ]
 }

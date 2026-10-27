@@ -1,95 +1,94 @@
-# Vercel API Proxy
+# Vercel AI Proxy — Deploy Relay Massal
 
-A secure, high-performance, serverless HTTP/HTTPS reverse proxy built for Vercel Serverless Functions.
+```
+febfrmn
+****   
+    ***
+       
+       
+  *    
+       
+     * 
+ *    *
+*  *   
+       
+       
+    *  
+          Vercel AI Proxy · deploy relay proxy massal
+          https://saweria.co/febfrmn
+```
 
-## 🚀 Features
+Deploy **relay proxy AI ke Vercel massal** — auto-detect plan + **PARALEL multi-worker**. Satu deploy = satu proxy.
 
-- **Transparent Forwarding**: Supports `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`.
-- **API Key Injection**: Server-side secret key injection via environment variables (`TARGET_API_KEY`).
-- **Header Protection**: Whitelists safe headers and strips internal hop-by-hop headers.
-- **CORS Configurable**: Configurable origin controls (`ALLOWED_ORIGINS`).
-- **Timeout Protection**: Configurable upstream timeout (`PROXY_TIMEOUT_MS`).
-- **Rate Limiting**: Built-in rate limiting protection (`RATE_LIMIT_ENABLED`).
-- **Health Check**: Health endpoint at `/api/health`.
+## Fitur
 
----
+- 🤖 **Auto-detect plan** — baca `/v2/teams` → billing.plan tiap team (hobby / pro_trial / pro / enterprise / personal)
+- 📦 **Deploy via API langsung** — create project → disable SSO → POST `/v13/deployments` (bukan CLI `npx vercel`)
+- ⚡ **PARALEL** — 3 workers default (up to N), jitter anti rate-limit, 3-5x lebih cepat dari sequential
+- 🔢 **Jumlah bebas** — dari argumen / env / default per plan
+- 📄 **Output `relay_urls.txt`** — 1 URL per baris
 
-## 🛠️ Environment Variables
+## Struktur
 
-Configure these variables in your Vercel Project Settings or local `.env` file:
+```
+vercel-ai-proxy/
+├── api/proxy.ts         # Relay proxy (Vercel Serverless Function)
+├── vercel.json          # Rewrite semua request → /api/proxy
+├── deploy_relays.py     # ⭐ Deploy massal + auto-detect plan
+├── assign_relays.py     # Assign relay URLs ke provider connections
+├── inject_relays.py     # Inject URL relay ke database (contoh)
+├── package.json         # Deploy single + @vercel/node
+```
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `TARGET_API_BASE_URL` | **Yes** | - | Base URL of the target API (e.g. `https://api.openai.com`) |
-| `TARGET_API_KEY` | No | - | Server-side secret key injected as `Authorization: Bearer <KEY>` |
-| `ALLOWED_ORIGINS` | No | `*` | Allowed origins for CORS headers |
-| `PROXY_TIMEOUT_MS` | No | `30000` | Upstream request timeout in milliseconds |
-| `RATE_LIMIT_ENABLED` | No | `true` | Enables or disables rate limiting (`true` / `false`) |
+## Cara Kerja Proxy
 
----
+`api/proxy.ts` relay universal:
+- Request masuk → baca header `x-relay-target` (URL tujuan) + `x-relay-path` (opsional)
+- Forward semua header kecuali `x-relay-target`, `host`, `content-length`, `accept-encoding`
+- Stream response balik, tambah header `x-relay-proxy: vercel`
+- Tanpa secret — murni header-based
 
-## 💻 Local Development
+## Auto-Detect Plan
 
-1. Install Vercel CLI (if not already installed):
+`deploy_relays.py` otomatis deteksi plan akun Vercel:
+
+| Plan | Default relay | Catatan |
+|------|--------------|---------|
+| semua plan | 100 | Default seragam |
+
+- **Tiap team** di `/v2/teams` = 1 plan (billing.plan dibaca dari detail team)
+- **Tidak ada team** → personal account = 1 plan
+
+## Deploy Massal
+
 ```bash
-npm install -g vercel
+export VERCEL_TOKEN="<token>"
+
+# auto-detect plan → jumlah default sesuai plan
+python3 deploy_relays.py
+
+# paksa jumlah (paralel 3 workers)
+python3 deploy_relays.py 50
+
+# custom jumlah worker
+python3 deploy_relays.py 100 --workers 5
+
+# atau via env
+RELAY_COUNT=100 python3 deploy_relays.py
 ```
 
-2. Run local dev server:
-```bash
-vercel dev
-```
+| Env | Fungsi |
+|-----|--------|
+| `VERCEL_TOKEN` | Token Vercel (WAJIB) |
+| `RELAY_COUNT` | Jumlah relay per plan (kalau ga pakai argumen) |
+
+## Konvensi
+
+- Python stdlib (urllib) — tanpa dependency tambahan
+- TypeScript + @vercel/node untuk function
+- Semua token via env — NO hardcode
+- Path relatif — jalankan dari folder script
+- Output URL relay ke `relay_urls.txt`
 
 ---
-
-## 🚀 Production Deployment
-
-Deploy directly to Vercel using the Vercel CLI:
-
-```bash
-vercel --prod
-```
-
-Or connect the repository to your Vercel Dashboard for continuous deployment.
-
----
-
-## 📖 Usage Examples
-
-### 1. Health Check
-```http
-GET /api/health
-```
-
-**Response (200 OK):**
-```json
-{
-  "status": "ok",
-  "service": "vercel-api-proxy"
-}
-```
-
-### 2. Forwarding Requests
-
-Client sends request to proxy:
-```http
-POST https://your-proxy.vercel.app/api/proxy/v1/chat/completions
-Content-Type: application/json
-
-{
-  "model": "gpt-4o",
-  "messages": [{ "role": "user", "content": "Hello!" }]
-}
-```
-
-Proxy forwards upstream to:
-```http
-POST https://TARGET_API_BASE_URL/v1/chat/completions
-Authorization: Bearer <TARGET_API_KEY>
-Content-Type: application/json
-
-{
-  "model": "gpt-4o",
-  "messages": [{ "role": "user", "content": "Hello!" }]
-}
-```
+Dibuat oleh [febfrmn](https://github.com/febfrmn) · Traktir kopi: https://saweria.co/febfrmn
