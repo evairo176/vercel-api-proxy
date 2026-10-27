@@ -116,7 +116,6 @@ def vercel_get_plans():
 # Keep in sync with the repo layout — a missing entry here deploys a broken proxy.
 DEPLOY_FILES = [
     "api/proxy/index.ts",
-    "api/proxy/[...path].ts",
     "api/health.ts",
     "lib/proxy-handler.ts",
     "package.json",
@@ -154,6 +153,21 @@ def vercel_create_deployment(project_name, team_id=None):
         return {"ok": False, "error": f"project create failed: {proj.get('error', 'no id')}"}
 
     vercel_api("PATCH", f"/v9/projects/{project_id}", {"ssoProtection": None}, team_id)
+
+    # Optional upstream whitelist so a leaked relay URL cannot be used as an
+    # open proxy on the user's account. RELAY_ALLOWED_HOSTS="a.com,b.com"
+    allowed = os.environ.get("RELAY_ALLOWED_HOSTS", "").strip()
+    if allowed:
+        for key, value in (
+            ("ALLOWED_TARGET_HOSTS", allowed),
+            ("ALLOWED_ORIGINS", os.environ.get("RELAY_ALLOWED_ORIGINS", "*").strip()),
+        ):
+            vercel_api(
+                "POST",
+                f"/v10/projects/{project_id}/env",
+                {"key": key, "value": value, "type": "plain", "target": ["production", "preview"]},
+                team_id,
+            )
 
     files, ferr = read_sources()
     if ferr:

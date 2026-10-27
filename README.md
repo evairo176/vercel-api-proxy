@@ -34,11 +34,10 @@ Deploy **relay proxy AI ke Vercel massal** — auto-detect plan + **PARALEL mult
 
 ```
 vercel-ai-proxy/
-├── api/proxy/index.ts        # Route /api/proxy
-├── api/proxy/[...path].ts    # Route /api/proxy/* (catch-all dari rewrite)
+├── api/proxy/index.ts        # Route /api/proxy (satu-satunya entry function)
 ├── api/health.ts             # Route /api/health — liveness probe
-├── lib/proxy-handler.ts      # ⭐ Seluruh logic relay (dipakai 2 route di atas)
-├── vercel.json               # Rewrite semua request → /api/proxy
+├── lib/proxy-handler.ts      # ⭐ Seluruh logic relay
+├── vercel.json               # Rewrite: /(.*) → /api/proxy?__relay_path=$1
 ├── tsconfig.json             # Typecheck lokal (tidak ikut deploy)
 ├── deploy_relays.py          # ⭐ Deploy massal + auto-detect plan
 ├── assign_relays.py          # Assign relay URLs ke provider connections
@@ -133,6 +132,9 @@ RELAY_COUNT=100 python3 deploy_relays.py
 |-----|--------|
 | `VERCEL_TOKEN` | Token Vercel (WAJIB) |
 | `RELAY_COUNT` | Jumlah relay per plan (kalau ga pakai argumen) |
+| `RELAY_ALLOWED_HOSTS` | Kalau diisi (mis. `api.entrim.ai`), tiap project dapat env `ALLOWED_TARGET_HOSTS` — relay terkunci, tidak bisa dipakai sebagai open proxy |
+
+> Catatan Vercel: `[...path].ts` catch-all **tidak** didukung di project non-framework (dianggap nama file literal, hasilnya 404). Karena itu path asli dititipkan lewat query `__relay_path` oleh rewrite.
 
 ## Verifikasi deployment
 
